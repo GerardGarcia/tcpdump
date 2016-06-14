@@ -220,6 +220,9 @@ static const struct printer printers[] = {
 #ifdef DLT_PPP_SERIAL
 	{ ppp_hdlc_if_print,	DLT_PPP_SERIAL },
 #endif
+#ifdef DLT_VSOCK
+    { vsock_print,	DLT_VSOCK},
+#endif
 	{ NULL,			0 },
 };
 

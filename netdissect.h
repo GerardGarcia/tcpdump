@@ -435,6 +435,7 @@ extern u_int symantec_if_print IF_PRINTER_ARGS;
 extern u_int token_if_print IF_PRINTER_ARGS;
 extern u_int usb_linux_48_byte_print IF_PRINTER_ARGS;
 extern u_int usb_linux_64_byte_print IF_PRINTER_ARGS;
+extern u_int vsock_print IF_PRINTER_ARGS;
 
 /* The printer routines. */
 
