@@ -31,43 +31,34 @@
 
 static const char tstr[] = " [|vsock]";
 
-enum af_vsockmon_type {
-	AF_VSOCK_GENERIC = 1,
-    AF_VSOCK_VIRTIO = 2,
+enum af_vsockmon_t {
+	AF_VSOCK_T_UNKNOWN = 0,
+	AF_VSOCK_T_NO_INFO = 1,		/* No transport information */
+	AF_VSOCK_T_VIRTIO = 2,		/* Virtio transport header */
 };
 
 static const struct tok vsock_type[] = {
-    {AF_VSOCK_GENERIC, "GENERIC"},
-    {AF_VSOCK_VIRTIO, "VIRTIO"},
+    {AF_VSOCK_T_UNKNOWN, "UNKNOWN"},
+    {AF_VSOCK_T_NO_INFO, "NO_INFO"},
+    {AF_VSOCK_T_VIRTIO, "VIRTIO"},
 	{ 0, NULL }
 };
 
-
-enum af_vsockmon_g_ops {
-	AF_VSOCK_G_OP_UNKNOWN = 0,
-	AF_VSOCK_G_OP_CONNECT = 1,
-	AF_VSOCK_G_OP_DISCONNECT = 2,
-	AF_VSOCK_G_OP_CONTROL = 3,
-	AF_VSOCK_G_OP_PAYLOAD = 4,
+enum af_vsockmon_op {
+	AF_VSOCK_OP_UNKNOWN = 0,
+	AF_VSOCK_OP_CONNECT = 1,
+	AF_VSOCK_OP_DISCONNECT = 2,
+	AF_VSOCK_OP_CONTROL = 3,
+	AF_VSOCK_OP_PAYLOAD = 4,
 };
 
 static const struct tok vsock_op[] = {
-    {AF_VSOCK_G_OP_UNKNOWN, "UNKNOWN"},
-    {AF_VSOCK_G_OP_CONNECT, "CONNECT"},
-    {AF_VSOCK_G_OP_DISCONNECT, "DISCONNECT"},
-    {AF_VSOCK_G_OP_CONTROL, "CONTROL"},
-    {AF_VSOCK_G_OP_PAYLOAD, "PAYLOAD"},
+    {AF_VSOCK_OP_UNKNOWN, "UNKNOWN"},
+    {AF_VSOCK_OP_CONNECT, "CONNECT"},
+    {AF_VSOCK_OP_DISCONNECT, "DISCONNECT"},
+    {AF_VSOCK_OP_CONTROL, "CONTROL"},
+    {AF_VSOCK_OP_PAYLOAD, "PAYLOAD"},
 	{ 0, NULL }
-};
-
-
-// CPU-endian
-struct af_vsockmon_g {
-	uint16_t op; /* enum af_vsock_g_ops */
-	uint32_t src_cid;
-	uint32_t src_port;
-	uint32_t dst_cid;
-	uint32_t dst_port;
 };
 
 enum virtio_vsock_type {
@@ -102,7 +93,6 @@ static const struct tok virtio_op[] = {
 	{ 0, NULL }
 };
 
-// Little-endian
 struct virtio_vsock_hdr {
 	uint64_t	src_cid;
 	uint64_t	dst_cid;
@@ -110,15 +100,20 @@ struct virtio_vsock_hdr {
 	uint32_t	dst_port;
 	uint32_t	len;
 	uint16_t	type;		/* enum virtio_vsock_type */
-	uint16_t	op;		/* enum virtio_vsock_op */
+	uint16_t	op;		    /* enum virtio_vsock_op */
 	uint32_t	flags;
 	uint32_t	buf_alloc;
 	uint32_t	fwd_cnt;
 };
 
+// Little-endian
 struct af_vsockmon_hdr {
-	uint16_t type;  /* enum af_vosck_type */
-	struct af_vsockmon_g g_hdr;
+	uint64_t src_cid;
+	uint32_t src_port;
+	uint64_t dst_cid;
+	uint32_t dst_port;
+	uint16_t op;			/* enum af_vsockmon_op */
+	uint16_t t;			    /* enum af_vosckmon_t */
 	union {
 		struct virtio_vsock_hdr virtio_hdr;
 	} t_hdr;
@@ -147,26 +142,26 @@ vsock_virtio_hdr_print(netdissect_options *ndo, const struct virtio_vsock_hdr *h
 
     u32_v = EXTRACT_LE_32BITS(&hdr->fwd_cnt);
     ND_PRINT((ndo, ", fwd_cnt %u", u32_v));
-
 }
 
 
 static void
 vsock_hdr_print(netdissect_options *ndo, const u_char *p, const u_int len)
 {
+    uint16_t hdr_t, hdr_op;
+    uint32_t hdr_src_port, hdr_dst_port;
+    uint64_t hdr_src_cid, hdr_dst_cid;
 
     const struct af_vsockmon_hdr *hdr = (struct af_vsockmon_hdr *) p;
-    const struct af_vsockmon_g *g_hdr = &hdr->g_hdr;
-    const struct virtio_vsock_hdr *virtio_hdr;
     const u_char *payload;
 
-	ND_PRINT((ndo, "%s", tok2str(vsock_type, "Invalid type (%u)", hdr->type)));
+    hdr_t = EXTRACT_LE_16BITS(&hdr->t);
+	ND_PRINT((ndo, "%s", tok2str(vsock_type, "Invalid type (%u)", hdr_t)));
 
-    /* If verbose level is more than 0 print
-     * transport details */
+    /* If verbose level is more than 0 print transport details */
     if (ndo->ndo_vflag) {
-        switch (hdr->type) {
-            case AF_VSOCK_VIRTIO:
+        switch (hdr_t) {
+            case AF_VSOCK_T_VIRTIO:
                 ND_PRINT((ndo, " ("));
                 vsock_virtio_hdr_print(ndo, &hdr->t_hdr.virtio_hdr);
                 ND_PRINT((ndo, ")"));
@@ -180,15 +175,20 @@ vsock_hdr_print(netdissect_options *ndo, const u_char *p, const u_int len)
         ND_PRINT((ndo, " "));
     }
 
-    ND_PRINT((ndo, "%u.%hu > %u.%hu %s, length %u",
-                g_hdr->src_cid, g_hdr->src_port,
-                g_hdr->dst_cid, g_hdr->dst_port,
-	            tok2str(vsock_op, " invalid op (%u)", g_hdr->op),
+    hdr_src_cid = EXTRACT_LE_64BITS(&hdr->src_cid);
+    hdr_src_port = EXTRACT_LE_32BITS(&hdr->src_port);
+    hdr_dst_cid = EXTRACT_LE_64BITS(&hdr->dst_cid);
+    hdr_dst_port = EXTRACT_LE_32BITS(&hdr->dst_port);
+    hdr_op = EXTRACT_LE_16BITS(&hdr->op);
+    ND_PRINT((ndo, "%lu.%hu > %lu.%hu %s, length %u",
+                hdr->src_cid, hdr->src_port,
+                hdr->dst_cid, hdr->dst_port,
+	            tok2str(vsock_op, " invalid op (%u)", hdr->op),
                 len));
 
     /* If debug level is more than 1 print payload contents */
     if (ndo->ndo_vflag > 1 &&
-            g_hdr->op == AF_VSOCK_G_OP_PAYLOAD &&
+            hdr_op == AF_VSOCK_OP_PAYLOAD &&
             len > sizeof(struct af_vsockmon_hdr)) {
         ND_PRINT((ndo, "\n"));
         payload = p + sizeof(struct af_vsockmon_hdr);
