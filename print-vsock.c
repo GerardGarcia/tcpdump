@@ -109,8 +109,8 @@ struct virtio_vsock_hdr {
 // Little-endian
 struct af_vsockmon_hdr {
 	uint64_t src_cid;
-	uint32_t src_port;
 	uint64_t dst_cid;
+	uint32_t src_port;
 	uint32_t dst_port;
 	uint16_t op;			/* enum af_vsockmon_op */
 	uint16_t t;			    /* enum af_vosckmon_t */
@@ -176,8 +176,8 @@ vsock_hdr_print(netdissect_options *ndo, const u_char *p, const u_int len)
     }
 
     hdr_src_cid = EXTRACT_LE_64BITS(&hdr->src_cid);
-    hdr_src_port = EXTRACT_LE_32BITS(&hdr->src_port);
     hdr_dst_cid = EXTRACT_LE_64BITS(&hdr->dst_cid);
+    hdr_src_port = EXTRACT_LE_32BITS(&hdr->src_port);
     hdr_dst_port = EXTRACT_LE_32BITS(&hdr->dst_port);
     hdr_op = EXTRACT_LE_16BITS(&hdr->op);
     ND_PRINT((ndo, "%lu.%hu > %lu.%hu %s, length %u",
