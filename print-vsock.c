@@ -114,6 +114,7 @@ struct af_vsockmon_hdr {
 	uint32_t dst_port;
 	uint16_t op;			/* enum af_vsockmon_op */
 	uint16_t t;			    /* enum af_vosckmon_t */
+    uint16_t len;	        /* sizeof(t_hdr) */
 	union {
 		struct virtio_vsock_hdr virtio_hdr;
 	} t_hdr;
